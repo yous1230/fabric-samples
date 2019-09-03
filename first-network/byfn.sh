@@ -121,8 +121,8 @@ BLACKLISTED_VERSIONS="^1\.0\. ^1\.1\.0-preview ^1\.1\.0-alpha"
 function checkPrereqs() {
   # Note, we check configtxlator externally because it does not require a config file, and peer in the
   # docker image because of FAB-8551 that makes configtxlator return 'development version' in docker
-  LOCAL_VERSION=$(configtxlator version | sed -ne 's/ Version: //p')
-  DOCKER_IMAGE_VERSION=$(docker run --rm hyperledger/fabric-tools:$IMAGETAG peer version | sed -ne 's/ Version: //p' | head -1)
+  LOCAL_VERSION=$(docker run smartbft/fabric-tools configtxlator version | sed -ne 's/ Version: //p')
+  DOCKER_IMAGE_VERSION=$(docker run --rm smartbft/fabric-peer:latest peer version | sed -ne 's/ Version: //p' | head -1)
 
   echo "LOCAL_VERSION=$LOCAL_VERSION"
   echo "DOCKER_IMAGE_VERSION=$DOCKER_IMAGE_VERSION"
@@ -168,6 +168,8 @@ function networkUp() {
     COMPOSE_FILES="${COMPOSE_FILES} -f ${COMPOSE_FILE_KAFKA}"
   elif [ "${CONSENSUS_TYPE}" == "etcdraft" ]; then
     COMPOSE_FILES="${COMPOSE_FILES} -f ${COMPOSE_FILE_RAFT2}"
+  elif [ "${CONSENSUS_TYPE}" == "smartbft" ]; then
+    COMPOSE_FILES="${COMPOSE_FILES} -f ${COMPOSE_FILE_RAFT2}"
   fi
   if [ "${IF_COUCHDB}" == "couchdb" ]; then
     COMPOSE_FILES="${COMPOSE_FILES} -f ${COMPOSE_FILE_COUCH}"
@@ -185,7 +187,7 @@ function networkUp() {
     sleep 9
   fi
 
-  if [ "$CONSENSUS_TYPE" == "etcdraft" ]; then
+  if [ "$CONSENSUS_TYPE" == "etcdraft" -o "$CONSENSUS_TYPE" == "smartbft" ]; then
     sleep 1
     echo "Sleeping 15s to allow $CONSENSUS_TYPE cluster to complete booting"
     sleep 14
@@ -225,6 +227,8 @@ function upgradeNetwork() {
     if [ "${CONSENSUS_TYPE}" == "kafka" ]; then
       COMPOSE_FILES="${COMPOSE_FILES} -f ${COMPOSE_FILE_KAFKA}"
     elif [ "${CONSENSUS_TYPE}" == "etcdraft" ]; then
+      COMPOSE_FILES="${COMPOSE_FILES} -f ${COMPOSE_FILE_RAFT2}"
+    elif [ "${CONSENSUS_TYPE}" == "smartbft" ]; then
       COMPOSE_FILES="${COMPOSE_FILES} -f ${COMPOSE_FILE_RAFT2}"
     fi
     if [ "${IF_COUCHDB}" == "couchdb" ]; then
@@ -281,7 +285,7 @@ function networkDown() {
   if [ "$MODE" != "restart" ]; then
     # Bring down the network, deleting the volumes
     #Delete any ledger backups
-    docker run -v $PWD:/tmp/first-network --rm hyperledger/fabric-tools:$IMAGETAG rm -Rf /tmp/first-network/ledgers-backup
+    docker run -v $PWD:/tmp/first-network --rm smartbft/fabric-tools:latest rm -Rf /tmp/first-network/ledgers-backup
     #Cleanup the chaincode containers
     clearContainers
     #Cleanup images
@@ -345,7 +349,7 @@ function replacePrivateKey() {
 
 # Generates Org certs using cryptogen tool
 function generateCerts() {
-  which cryptogen
+  docker run smartbft/fabric-tools which cryptogen
   if [ "$?" -ne 0 ]; then
     echo "cryptogen tool not found. exiting"
     exit 1
@@ -359,7 +363,10 @@ function generateCerts() {
     rm -Rf crypto-config
   fi
   set -x
-  cryptogen generate --config=./crypto-config.yaml
+  mkdir crypto-config
+  docker run -v `pwd`:/mnt smartbft/fabric-tools cryptogen generate --config=/mnt/crypto-config.yaml --output /mnt/crypto-config
+  echo "Changing permission to crypto-config folder"
+  sudo chown -R `whoami`:`whoami` crypto-config
   res=$?
   set +x
   if [ $res -ne 0 ]; then
@@ -410,7 +417,7 @@ function generateCerts() {
 # Generate orderer genesis block, channel configuration transaction and
 # anchor peer update transactions
 function generateChannelArtifacts() {
-  which configtxgen
+  docker run smartbft/fabric-tools which configtxgen
   if [ "$?" -ne 0 ]; then
     echo "configtxgen tool not found. exiting"
     exit 1
@@ -429,6 +436,8 @@ function generateChannelArtifacts() {
     configtxgen -profile SampleDevModeKafka -channelID $SYS_CHANNEL -outputBlock ./channel-artifacts/genesis.block
   elif [ "$CONSENSUS_TYPE" == "etcdraft" ]; then
     configtxgen -profile SampleMultiNodeEtcdRaft -channelID $SYS_CHANNEL -outputBlock ./channel-artifacts/genesis.block
+  elif [ "$CONSENSUS_TYPE" == "smartbft" ]; then
+   docker run -e FABRIC_CFG_PATH=/mnt -v `pwd`:/mnt smartbft/fabric-tools configtxgen -profile SampleMultiNodeSmartBFT -channelID $SYS_CHANNEL -outputBlock /mnt/channel-artifacts/genesis.block
   else
     set +x
     echo "unrecognized CONSESUS_TYPE='$CONSENSUS_TYPE'. exiting"
@@ -440,12 +449,15 @@ function generateChannelArtifacts() {
     echo "Failed to generate orderer genesis block..."
     exit 1
   fi
+
+chown -R `whoami`:`whoami` channel-artifacts
+
   echo
   echo "#################################################################"
   echo "### Generating channel configuration transaction 'channel.tx' ###"
   echo "#################################################################"
   set -x
-  configtxgen -profile TwoOrgsChannel -outputCreateChannelTx ./channel-artifacts/channel.tx -channelID $CHANNEL_NAME
+  docker run -e FABRIC_CFG_PATH=/mnt -v `pwd`:/mnt smartbft/fabric-tools  configtxgen -profile TwoOrgsChannel -outputCreateChannelTx /mnt/channel-artifacts/channel.tx -channelID $CHANNEL_NAME
   res=$?
   set +x
   if [ $res -ne 0 ]; then
@@ -453,12 +465,15 @@ function generateChannelArtifacts() {
     exit 1
   fi
 
+   chown -R `whoami`:`whoami` channel-artifacts
+
+
   echo
   echo "#################################################################"
   echo "#######    Generating anchor peer update for Org1MSP   ##########"
   echo "#################################################################"
   set -x
-  configtxgen -profile TwoOrgsChannel -outputAnchorPeersUpdate ./channel-artifacts/Org1MSPanchors.tx -channelID $CHANNEL_NAME -asOrg Org1MSP
+  docker run -e FABRIC_CFG_PATH=/mnt -v `pwd`:/mnt smartbft/fabric-tools configtxgen -profile TwoOrgsChannel -outputAnchorPeersUpdate /mnt/channel-artifacts/Org1MSPanchors.tx -channelID $CHANNEL_NAME -asOrg Org1MSP
   res=$?
   set +x
   if [ $res -ne 0 ]; then
@@ -466,13 +481,16 @@ function generateChannelArtifacts() {
     exit 1
   fi
 
+   chown -R `whoami`:`whoami` channel-artifacts
+
+
   echo
   echo "#################################################################"
   echo "#######    Generating anchor peer update for Org2MSP   ##########"
   echo "#################################################################"
   set -x
-  configtxgen -profile TwoOrgsChannel -outputAnchorPeersUpdate \
-    ./channel-artifacts/Org2MSPanchors.tx -channelID $CHANNEL_NAME -asOrg Org2MSP
+  docker run -e FABRIC_CFG_PATH=/mnt -v `pwd`:/mnt smartbft/fabric-tools configtxgen -profile TwoOrgsChannel -outputAnchorPeersUpdate \
+    /mnt/channel-artifacts/Org2MSPanchors.tx -channelID $CHANNEL_NAME -asOrg Org2MSP
   res=$?
   set +x
   if [ $res -ne 0 ]; then
@@ -481,6 +499,9 @@ function generateChannelArtifacts() {
   fi
   echo
 }
+
+   chown -R `whoami`:`whoami` channel-artifacts
+
 
 # Obtain the OS and Architecture string that will be used to select the correct
 # native binaries for your platform, e.g., darwin-amd64 or linux-amd64
