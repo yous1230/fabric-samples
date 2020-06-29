@@ -85,16 +85,18 @@ updateAnchorPeers 0 1
 echo "Updating anchor peers for org2..."
 updateAnchorPeers 0 2
 
+echo "Adding orderer5.example.com to the system channel"
+channelConfig byfn-sys-channel addOSN
+echo "Adding orderer5.example.com to mychannel"
+channelConfig mychannel addOSN
+
+sleep 2
+echo "Pulling system channel latest block"
+CORE_PEER_LOCALMSPID="OrdererMSP" CORE_PEER_TLS_ROOTCERT_FILE=$ORDERER_CA CORE_PEER_MSPCONFIGPATH=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto/ordererOrganizations/example.com/users/Admin@example.com/msp peer channel fetch config syschan_block.pb -o orderer.example.com:7050 -c byfn-sys-channel --tls --cafile $ORDERER_CA
+
+sleep 2
+
 if [ "${NO_CHAINCODE}" != "true" ]; then
-
-    echo "Removing orderer5.example.com..."
-    channelConfig mychannel removeOSN
-    sleep 10
-
-    echo "Re-adding orderer5.example.com..."
-    channelConfig mychannel addOSN
-    sleep 10
-
 	## Install chaincode on peer0.org1 and peer0.org2
 	echo "Installing chaincode on peer0.org1..."
 	installChaincode 0 1
@@ -113,6 +115,7 @@ if [ "${NO_CHAINCODE}" != "true" ]; then
 	echo "Sending invoke transaction on peer0.org1 peer0.org2..."
 	chaincodeInvoke 0 1 0 2
 fi
+
 
 echo
 echo "========= All GOOD, BYFN execution completed =========== "

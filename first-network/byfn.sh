@@ -174,7 +174,9 @@ function networkUp() {
   if [ "${IF_COUCHDB}" == "couchdb" ]; then
     COMPOSE_FILES="${COMPOSE_FILES} -f ${COMPOSE_FILE_COUCH}"
   fi
-  IMAGE_TAG=$IMAGETAG docker-compose ${COMPOSE_FILES} up -d 2>&1
+  IMAGE_TAG=$IMAGETAG docker-compose ${COMPOSE_FILES} up -d  orderer.example.com orderer2.example.com \
+   orderer3.example.com orderer4.example.com \
+    peer0.org1.example.com peer1.org1.example.com peer0.org2.example.com peer1.org2.example.com cli 2>&1
   docker ps -a
   if [ $? -ne 0 ]; then
     echo "ERROR !!!! Unable to start network"
@@ -199,6 +201,13 @@ function networkUp() {
     echo "ERROR !!!! Test failed"
     exit 1
   fi
+
+  echo "copying latest system channel config block to orderer boot directory"
+  docker cp cli:/opt/gopath/src/github.com/hyperledger/fabric/peer/syschan_block.pb channel-artifacts/syschan_block.pb
+
+  echo "Bringing up orderer5.example.com"
+  docker-compose ${COMPOSE_FILES} up orderer5.example.com
+
 }
 
 # Upgrade the network components which are at version 1.3.x to 1.4.x

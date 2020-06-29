@@ -476,13 +476,13 @@ Profiles:
                   ConsenterId: 4
                   Identity: crypto-config/ordererOrganizations/example.com/orderers/orderer4.example.com/msp/signcerts/orderer4.example.com-cert.pem
                   MSPID: OrdererMSP
-                - Host: orderer5.example.com
-                  Port: 7050
-                  ClientTLSCert: crypto-config/ordererOrganizations/example.com/orderers/orderer5.example.com/tls/server.crt
-                  ServerTLSCert: crypto-config/ordererOrganizations/example.com/orderers/orderer5.example.com/tls/server.crt
-                  Identity: crypto-config/ordererOrganizations/example.com/orderers/orderer5.example.com/msp/signcerts/orderer5.example.com-cert.pem
-                  ConsenterId: 5
-                  MSPID: OrdererMSP
+#                - Host: orderer5.example.com
+#                  Port: 7050
+#                  ClientTLSCert: crypto-config/ordererOrganizations/example.com/orderers/orderer5.example.com/tls/server.crt
+#                  ServerTLSCert: crypto-config/ordererOrganizations/example.com/orderers/orderer5.example.com/tls/server.crt
+#                  Identity: crypto-config/ordererOrganizations/example.com/orderers/orderer5.example.com/msp/signcerts/orderer5.example.com-cert.pem
+#                  ConsenterId: 5
+#                  MSPID: OrdererMSP
             Addresses:
                 - orderer.example.com:7050
                 - orderer2.example.com:7050

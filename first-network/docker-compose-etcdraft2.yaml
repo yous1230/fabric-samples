@@ -68,8 +68,10 @@ services:
     container_name: orderer5.example.com
     networks:
     - byfn
+    environment:
+        - ORDERER_GENERAL_GENESISFILE=/boot/syschan_block.pb
     volumes:
-        - ./channel-artifacts/genesis.block:/var/hyperledger/orderer/orderer.genesis.block
+        - ./channel-artifacts:/boot
         - ./crypto-config/ordererOrganizations/example.com/orderers/orderer5.example.com/msp:/var/hyperledger/orderer/msp
         - ./crypto-config/ordererOrganizations/example.com/orderers/orderer5.example.com/tls/:/var/hyperledger/orderer/tls
         - orderer5.example.com:/var/hyperledger/production/orderer
