@@ -38,6 +38,7 @@ echo "Channel name : "$CHANNEL_NAME
 
 # import utils
 . scripts/utils.sh
+. scripts/bftutil.sh
 
 createChannel() {
 	setGlobals 0 1
@@ -85,6 +86,14 @@ echo "Updating anchor peers for org2..."
 updateAnchorPeers 0 2
 
 if [ "${NO_CHAINCODE}" != "true" ]; then
+
+    echo "Removing orderer5.example.com..."
+    channelConfig mychannel removeOSN
+    sleep 10
+
+    echo "Re-adding orderer5.example.com..."
+    channelConfig mychannel addOSN
+    sleep 10
 
 	## Install chaincode on peer0.org1 and peer0.org2
 	echo "Installing chaincode on peer0.org1..."
