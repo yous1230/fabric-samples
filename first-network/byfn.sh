@@ -300,7 +300,9 @@ function networkDown() {
     #Cleanup images
     removeUnwantedImages
     # remove orderer block and other channel configuration transactions and certs
-    rm -rf channel-artifacts/*.block channel-artifacts/*.tx crypto-config ./org3-artifacts/crypto-config/ channel-artifacts/org3.json
+    docker run -v `pwd`:/mnt smartbft/fabric-tools rm -rf /mnt/crypto-config
+    docker run -v `pwd`:/mnt smartbft/fabric-tools rm -rf /mnt/channel-artifacts/*.block
+    docker run -v `pwd`:/mnt smartbft/fabric-tools rm -rf /mnt/channel-artifacts/*.tx
     # remove the docker-compose yaml file that was customized to the example
     rm -f docker-compose-e2e.yaml
   fi
@@ -372,10 +374,8 @@ function generateCerts() {
     rm -Rf crypto-config
   fi
   set -x
-  mkdir crypto-config
+  docker run -v `pwd`:/mnt smartbft/fabric-tools rm -rf /mnt/crypto-config
   docker run -v `pwd`:/mnt smartbft/fabric-tools cryptogen generate --config=/mnt/crypto-config.yaml --output /mnt/crypto-config
-  echo "Changing permission to crypto-config folder"
-  sudo chown -R `whoami`:`whoami` crypto-config
   res=$?
   set +x
   if [ $res -ne 0 ]; then
@@ -459,7 +459,7 @@ function generateChannelArtifacts() {
     exit 1
   fi
 
-chown -R `whoami`:`whoami` channel-artifacts
+#docker run -v `pwd`:/mnt smartbft/fabric-tools rm -rf /mnt/channel-artifacts
 
   echo
   echo "#################################################################"
@@ -474,7 +474,6 @@ chown -R `whoami`:`whoami` channel-artifacts
     exit 1
   fi
 
-   chown -R `whoami`:`whoami` channel-artifacts
 
 
   echo
@@ -490,7 +489,6 @@ chown -R `whoami`:`whoami` channel-artifacts
     exit 1
   fi
 
-   chown -R `whoami`:`whoami` channel-artifacts
 
 
   echo
@@ -508,8 +506,6 @@ chown -R `whoami`:`whoami` channel-artifacts
   fi
   echo
 }
-
-   chown -R `whoami`:`whoami` channel-artifacts
 
 
 # Obtain the OS and Architecture string that will be used to select the correct
