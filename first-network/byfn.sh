@@ -31,6 +31,7 @@
 export PATH=${PWD}/../bin:${PWD}:$PATH
 export FABRIC_CFG_PATH=${PWD}
 export VERBOSE=false
+export GMSM=false
 
 # Print the usage message
 function printHelp() {
@@ -53,6 +54,7 @@ function printHelp() {
   echo "    -a - launch certificate authorities (no certificate authorities are launched by default)"
   echo "    -n - do not deploy chaincode (abstore chaincode is deployed by default)"
   echo "    -v - verbose mode"
+  echo "    -g - enable guomi algorithm with SM2/SM3"
   echo "  byfn.sh -h (print this message)"
   echo
   echo "Typically, one would first generate the required certificates and "
@@ -375,7 +377,13 @@ function generateCerts() {
   fi
   set -x
   docker run -v `pwd`:/mnt smartbft/fabric-tools rm -rf /mnt/crypto-config
-  docker run -v `pwd`:/mnt smartbft/fabric-tools cryptogen generate --config=/mnt/crypto-config.yaml --output /mnt/crypto-config
+  if [[ "${GMSM}" == "true" ]]; then
+    docker run -v `pwd`:/mnt smartbft/fabric-tools cryptogen generate --config=/mnt/crypto-config.yaml --output /mnt/crypto-config --crypto=SW/SM2/SM3-256
+  else
+    docker run -v `pwd`:/mnt smartbft/fabric-tools cryptogen generate --config=/mnt/crypto-config.yaml --output /mnt/crypto-config
+  fi
+#  docker run -v `pwd`:/mnt smartbft/fabric-tools rm -rf /mnt/crypto-config
+#  docker run -v `pwd`:/mnt smartbft/fabric-tools cryptogen generate --config=/mnt/crypto-config.yaml --output /mnt/crypto-config 
   res=$?
   set +x
   if [ $res -ne 0 ]; then
@@ -439,14 +447,30 @@ function generateChannelArtifacts() {
   # named orderer.genesis.block or the orderer will fail to launch!
   echo "CONSENSUS_TYPE="$CONSENSUS_TYPE
   set -x
-  if [ "$CONSENSUS_TYPE" == "solo" ]; then
-    configtxgen -profile TwoOrgsOrdererGenesis -channelID $SYS_CHANNEL -outputBlock ./channel-artifacts/genesis.block
-  elif [ "$CONSENSUS_TYPE" == "kafka" ]; then
-    configtxgen -profile SampleDevModeKafka -channelID $SYS_CHANNEL -outputBlock ./channel-artifacts/genesis.block
-  elif [ "$CONSENSUS_TYPE" == "etcdraft" ]; then
-    configtxgen -profile SampleMultiNodeEtcdRaft -channelID $SYS_CHANNEL -outputBlock ./channel-artifacts/genesis.block
-  elif [ "$CONSENSUS_TYPE" == "smartbft" ]; then
-   docker run -e FABRIC_CFG_PATH=/mnt -v `pwd`:/mnt smartbft/fabric-tools configtxgen -profile SampleMultiNodeSmartBFT -channelID $SYS_CHANNEL -outputBlock /mnt/channel-artifacts/genesis.block
+  if [[ "$CONSENSUS_TYPE" == "solo" ]]; then
+    if [ "${GMSM}" == "true" ]; then
+        configtxgen -profile TwoOrgsOrdererGenesis -channelID $SYS_CHANNEL -outputBlock ./channel-artifacts/genesis.block -crypto SW/SM2/SM3-256
+    else
+        configtxgen -profile TwoOrgsOrdererGenesis -channelID $SYS_CHANNEL -outputBlock ./channel-artifacts/genesis.block
+    fi
+  elif [[ "$CONSENSUS_TYPE" == "kafka" ]]; then
+    if [[ "${GMSM}" == "true" ]]; then
+        configtxgen -profile SampleDevModeKafka -channelID $SYS_CHANNEL -outputBlock ./channel-artifacts/genesis.block -crypto SW/SM2/SM3-256
+    else
+        configtxgen -profile SampleDevModeKafka -channelID $SYS_CHANNEL -outputBlock ./channel-artifacts/genesis.block
+    fi
+  elif [[ "$CONSENSUS_TYPE" == "etcdraft" ]]; then
+    if [[ "${GMSM}" == "true" ]]; then
+        configtxgen -profile SampleMultiNodeEtcdRaft -channelID $SYS_CHANNEL -outputBlock ./channel-artifacts/genesis.block -crypto SW/SM2/SM3-256
+    else
+        configtxgen -profile SampleMultiNodeEtcdRaft -channelID $SYS_CHANNEL -outputBlock ./channel-artifacts/genesis.block
+    fi
+  elif [[ "$CONSENSUS_TYPE" == "smartbft" ]]; then
+    if [[ "${GMSM}" == "true" ]]; then
+        docker run -e FABRIC_CFG_PATH=/mnt -v `pwd`:/mnt smartbft/fabric-tools configtxgen -profile SampleMultiNodeSmartBFT -channelID $SYS_CHANNEL -outputBlock /mnt/channel-artifacts/genesis.block -crypto SW/SM2/SM3-256
+    else
+        docker run -e FABRIC_CFG_PATH=/mnt -v `pwd`:/mnt smartbft/fabric-tools configtxgen -profile SampleMultiNodeSmartBFT -channelID $SYS_CHANNEL -outputBlock /mnt/channel-artifacts/genesis.block
+    fi  
   else
     set +x
     echo "unrecognized CONSESUS_TYPE='$CONSENSUS_TYPE'. exiting"
@@ -466,7 +490,12 @@ function generateChannelArtifacts() {
   echo "### Generating channel configuration transaction 'channel.tx' ###"
   echo "#################################################################"
   set -x
-  docker run -e FABRIC_CFG_PATH=/mnt -v `pwd`:/mnt smartbft/fabric-tools  configtxgen -profile TwoOrgsChannel -outputCreateChannelTx /mnt/channel-artifacts/channel.tx -channelID $CHANNEL_NAME
+#docker run -e FABRIC_CFG_PATH=/mnt -v `pwd`:/mnt smartbft/fabric-tools  configtxgen -profile TwoOrgsChannel -outputCreateChannelTx /mnt/channel-artifacts/channel.tx -channelID $CHANNEL_NAME
+  if [[ "${GMSM}" == "true" ]]; then
+    docker run -e FABRIC_CFG_PATH=/mnt -v `pwd`:/mnt smartbft/fabric-tools  configtxgen -profile TwoOrgsChannel -outputCreateChannelTx /mnt/channel-artifacts/channel.tx -channelID $CHANNEL_NAME -crypto SW/SM2/SM3-256 
+  else
+    docker run -e FABRIC_CFG_PATH=/mnt -v `pwd`:/mnt smartbft/fabric-tools  configtxgen -profile TwoOrgsChannel -outputCreateChannelTx /mnt/channel-artifacts/channel.tx -channelID $CHANNEL_NAME
+  fi
   res=$?
   set +x
   if [ $res -ne 0 ]; then
@@ -481,7 +510,12 @@ function generateChannelArtifacts() {
   echo "#######    Generating anchor peer update for Org1MSP   ##########"
   echo "#################################################################"
   set -x
-  docker run -e FABRIC_CFG_PATH=/mnt -v `pwd`:/mnt smartbft/fabric-tools configtxgen -profile TwoOrgsChannel -outputAnchorPeersUpdate /mnt/channel-artifacts/Org1MSPanchors.tx -channelID $CHANNEL_NAME -asOrg Org1MSP
+#docker run -e FABRIC_CFG_PATH=/mnt -v `pwd`:/mnt smartbft/fabric-tools configtxgen -profile TwoOrgsChannel -outputAnchorPeersUpdate /mnt/channel-artifacts/Org1MSPanchors.tx -channelID $CHANNEL_NAME -asOrg Org1MSP
+  if [[ "${GMSM}" == "true" ]]; then
+    docker run -e FABRIC_CFG_PATH=/mnt -v `pwd`:/mnt smartbft/fabric-tools configtxgen -profile TwoOrgsChannel -outputAnchorPeersUpdate /mnt/channel-artifacts/Org1MSPanchors.tx -channelID $CHANNEL_NAME -asOrg Org1MSP  -crypto SW/SM2/SM3-256
+  else
+    docker run -e FABRIC_CFG_PATH=/mnt -v `pwd`:/mnt smartbft/fabric-tools configtxgen -profile TwoOrgsChannel -outputAnchorPeersUpdate /mnt/channel-artifacts/Org1MSPanchors.tx -channelID $CHANNEL_NAME -asOrg Org1MSP
+  fi
   res=$?
   set +x
   if [ $res -ne 0 ]; then
@@ -496,8 +530,15 @@ function generateChannelArtifacts() {
   echo "#######    Generating anchor peer update for Org2MSP   ##########"
   echo "#################################################################"
   set -x
-  docker run -e FABRIC_CFG_PATH=/mnt -v `pwd`:/mnt smartbft/fabric-tools configtxgen -profile TwoOrgsChannel -outputAnchorPeersUpdate \
-    /mnt/channel-artifacts/Org2MSPanchors.tx -channelID $CHANNEL_NAME -asOrg Org2MSP
+#docker run -e FABRIC_CFG_PATH=/mnt -v `pwd`:/mnt smartbft/fabric-tools configtxgen -profile TwoOrgsChannel -outputAnchorPeersUpdate \
+#    /mnt/channel-artifacts/Org2MSPanchors.tx -channelID $CHANNEL_NAME -asOrg Org2MSP
+  if [[ "${GMSM}" == "true" ]]; then
+    docker run -e FABRIC_CFG_PATH=/mnt -v `pwd`:/mnt smartbft/fabric-tools configtxgen -profile TwoOrgsChannel -outputAnchorPeersUpdate \
+        /mnt/channel-artifacts/Org2MSPanchors.tx -channelID $CHANNEL_NAME -asOrg Org2MSP -crypto SW/SM2/SM3-256
+  else
+    docker run -e FABRIC_CFG_PATH=/mnt -v `pwd`:/mnt smartbft/fabric-tools configtxgen -profile TwoOrgsChannel -outputAnchorPeersUpdate \
+        /mnt/channel-artifacts/Org2MSPanchors.tx -channelID $CHANNEL_NAME -asOrg Org2MSP
+  fi
   res=$?
   set +x
   if [ $res -ne 0 ]; then
@@ -562,7 +603,7 @@ else
   exit 1
 fi
 
-while getopts "h?c:t:d:f:s:l:i:o:anv" opt; do
+while getopts "h?c:t:d:f:s:l:i:o:anv:g" opt; do
   case "$opt" in
   h | \?)
     printHelp
@@ -600,6 +641,9 @@ while getopts "h?c:t:d:f:s:l:i:o:anv" opt; do
     ;;
   v)
     VERBOSE=true
+    ;;
+  g)
+    GMSM=true
     ;;
   esac
 done
